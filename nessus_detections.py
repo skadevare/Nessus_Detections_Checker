@@ -94,7 +94,7 @@ def scrape_tenable_cve(cve_id):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python tenable_cve_scraper.py CVE-YYYY-NNNNN")
+        print("Usage: python nessus_detections.py CVE-YYYY-NNNNN")
         sys.exit(1)
 
     cve_id = sys.argv[1].strip().upper()
