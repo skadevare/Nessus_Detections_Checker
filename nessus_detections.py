@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-tenable_cve_scraper.py
-Scrape Tenable CVE plugin listings (HTML table rows) for a given CVE.
+
+Tenable CVE plugin listings (HTML table rows) for a given CVE.
 
 Example:
-    python tenable_cve_scraper.py CVE-2025-20828
+    python nessus_detections.py CVE-2025-20828
 """
 
 import sys
