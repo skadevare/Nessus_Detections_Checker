@@ -5,12 +5,14 @@ Tenable CVE plugin listings (HTML table rows) for a given CVE.
 
 Example:
     python nessus_detections.py CVE-2025-20828
+    python nessus_detections.py CVE-2025-20828 --output json
 """
 
 import sys
 import json
 import time
 import logging
+import argparse
 import requests
 from bs4 import BeautifulSoup
 
@@ -24,22 +26,6 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Referer": "https://www.tenable.com/",
 }
-
-
-def fetch_html(url):
-    """Fetch page HTML with retries and polite delays."""
-    for attempt in range(3):
-        try:
-            r = requests.get(url, headers=HEADERS, timeout=20)
-            if r.status_code == 403:
-                logging.warning("Access denied (HTTP 403) for %s", url)
-            r.raise_for_status()
-            return r.text
-        except requests.RequestException as e:
-            logging.warning("Attempt %d failed: %s", attempt + 1, e)
-            time.sleep(2 + attempt)
-    raise RuntimeError(f"Failed to fetch {url} after retries.")
-
 
 def parse_plugins_from_table(html, base_url):
     """Parse plugin rows from Tenable CVE table HTML."""
@@ -87,34 +73,63 @@ def scrape_tenable_cve(cve_id):
     base_url = "https://www.tenable.com"
     target = f"{base_url}/cve/{cve_id}/plugins"
     logging.info("Fetching plugin list for %s", cve_id)
-    html = fetch_html(target)
-    plugins = parse_plugins_from_table(html, base_url)
+    html =  requests.get(target, headers=HEADERS, timeout=20)
+    if html.status_code != 200:
+        raise requests.HTTPError(f"HTTP Error: {html.status_code} for url: {target}", response=html.text)
+    
+    plugins = parse_plugins_from_table(html.text, base_url)
     return plugins
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python nessus_detections.py CVE-YYYY-NNNNN")
-        sys.exit(1)
-
-    cve_id = sys.argv[1].strip().upper()
-    plugins = scrape_tenable_cve(cve_id)
-
+    parser = argparse.ArgumentParser(
+        description="Tenable CVE plugin listings (HTML table rows) for a given CVE.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Example:\n  python nessus_detections.py CVE-2025-20828\n  python nessus_detections.py CVE-2025-20828 --output json"
+    )
+    parser.add_argument(
+        "cve_id",
+        help="CVE identifier (e.g., CVE-2025-20828)"
+    )
+    parser.add_argument(
+        "--output",
+        choices=["text", "json"],
+        default="text",
+        help="Output format: 'text' for human-readable format (default), 'json' for JSON format"
+    )
+    
+    args = parser.parse_args()
+    
+    cve_id = args.cve_id.strip().upper()
+    
+    try:
+        plugins = scrape_tenable_cve(cve_id)
+    except requests.HTTPError as e:
+        print(f"Problem fetching CVE {cve_id} from Tenable's website: {e}")
+        sys.exit(0)
+    
     if not plugins:
-        print(f"No plugins found for {cve_id}.")
+        if args.output == "json":
+            print(json.dumps({"cve": cve_id, "plugins": []}, indent=2))
+        else:
+            print(f"No plugins found for {cve_id}.")
         sys.exit(0)
 
-    print(f"Found {len(plugins)} plugin(s) for {cve_id}:\n")
-    for p in plugins:
-        print(f"🧩 Plugin ID: {p['id']}")
-        print(f"   Name: {p['name']}")
-        print(f"   Family: {p['family']}")
-        print(f"   Severity: {p['severity']}")
-        print(f"   URL: {p['url']}\n")
-
-    # Also print JSON output at the end (optional)
-    #print("JSON output:\n")
-    #print(json.dumps(plugins, indent=2))
+    if args.output == "json":
+        output_data = {
+            "cve": cve_id,
+            "count": len(plugins),
+            "plugins": plugins
+        }
+        print(json.dumps(output_data, indent=2))
+    else:
+        print(f"Found {len(plugins)} plugin(s) for {cve_id}:\n")
+        for p in plugins:
+            print(f"🧩 Plugin ID: {p['id']}")
+            print(f"   Name: {p['name']}")
+            print(f"   Family: {p['family']}")
+            print(f"   Severity: {p['severity']}")
+            print(f"   URL: {p['url']}\n")
 
 
 if __name__ == "__main__":
